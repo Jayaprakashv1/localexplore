@@ -28,6 +28,9 @@
         "projectId": "04be1d8e-1f12-4427-98de-6c45250f6e87"
       }
     },
-    "owner": "jay135"
+    "owner": "jay135",
+    "android": {
+      "package": "com.jay135.traveldiscover"
+    }
   }
 }
