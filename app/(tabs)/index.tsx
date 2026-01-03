@@ -67,7 +67,8 @@ export default function DiscoverScreen() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch location data');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to fetch location data (${response.status})`);
       }
 
       const data = await response.json();
@@ -83,7 +84,9 @@ export default function DiscoverScreen() {
       }
       setSavedPlaces(newSavedPlaces);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+      setError(errorMsg);
+      setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
     }
@@ -94,7 +97,13 @@ export default function DiscoverScreen() {
       await savePlace(placeName, placeType as any, location, description, rating);
       setSavedPlaces(prev => new Set(prev).add(placeName));
     } catch (err) {
-      setError('Failed to save place');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to save place';
+      if (errorMsg === 'This place is already saved') {
+        setSavedPlaces(prev => new Set(prev).add(placeName));
+      } else {
+        setError(errorMsg);
+        setTimeout(() => setError(''), 3000);
+      }
     }
   };
 

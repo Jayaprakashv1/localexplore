@@ -22,23 +22,40 @@ export async function savePlace(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('User not authenticated');
 
+  if (!place_name || !place_type || !location) {
+    throw new Error('Place name, type, and location are required');
+  }
+
+  const alreadySaved = await isSaved(place_name, location);
+  if (alreadySaved) {
+    throw new Error('This place is already saved');
+  }
+
   const { error } = await supabase.from('saved_places').insert({
     user_id: user.id,
-    place_name,
+    place_name: place_name.trim(),
     place_type,
-    location,
-    description,
-    rating,
+    location: location.trim(),
+    description: description?.trim(),
+    rating: rating && rating > 0 && rating <= 5 ? rating : null,
   });
 
   if (error) throw error;
 }
 
 export async function unsavePlace(placeId: string) {
+  if (!placeId) {
+    throw new Error('Place ID is required');
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
   const { error } = await supabase
     .from('saved_places')
     .delete()
-    .eq('id', placeId);
+    .eq('id', placeId)
+    .eq('user_id', user.id);
 
   if (error) throw error;
 }
@@ -92,10 +109,17 @@ export async function addSearchHistory(location: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  await supabase.from('search_history').insert({
-    user_id: user.id,
-    location,
-  });
+  const trimmedLocation = location.trim();
+  if (!trimmedLocation) return;
+
+  try {
+    await supabase.from('search_history').insert({
+      user_id: user.id,
+      location: trimmedLocation,
+    });
+  } catch (error) {
+    console.error('Failed to add search history:', error);
+  }
 }
 
 export async function getSearchHistory(): Promise<string[]> {

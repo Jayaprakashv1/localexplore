@@ -31,8 +31,9 @@ export default function SavedScreen() {
       setPlaces(savedPlaces);
       setError('');
     } catch (err) {
-      setError('Failed to load saved places');
-      console.error(err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load saved places';
+      setError(errorMsg);
+      console.error('Error loading saved places:', err);
     } finally {
       setLoading(false);
     }
@@ -42,8 +43,11 @@ export default function SavedScreen() {
     try {
       await unsavePlace(placeId);
       setPlaces(places.filter(p => p.id !== placeId));
+      setError('');
     } catch (err) {
-      setError('Failed to remove place');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to remove place';
+      setError(errorMsg);
+      setTimeout(() => setError(''), 3000);
     }
   };
 
