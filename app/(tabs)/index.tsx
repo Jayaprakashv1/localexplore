@@ -11,8 +11,8 @@ import {
   Pressable,
   FlatList,
 } from 'react-native';
-import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X } from 'lucide-react-native';
-import { addSearchHistory, getSearchHistory, savePlace, isSaved, getSavedPlacesByLocation } from '@/lib/database';
+import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X, Trash } from 'lucide-react-native';
+import { addSearchHistory, getSearchHistory, savePlace, isSaved, getSavedPlacesByLocation, clearSearchHistory } from '@/lib/database';
 
 type LocationData = {
   places: Array<{ name: string; description: string; rating?: number }>;
@@ -115,6 +115,16 @@ export default function DiscoverScreen() {
     }, 50);
   };
 
+  const handleClearHistory = async () => {
+    try {
+      await clearSearchHistory();
+      setSearchHistory([]);
+      setShowHistory(false);
+    } catch (err) {
+      console.error('Failed to clear history:', err);
+    }
+  };
+
   const PlaceCard = ({ title, description, type, rating }: any) => {
     const isSavedPlace = savedPlaces.has(title);
     return (
@@ -189,7 +199,12 @@ export default function DiscoverScreen() {
 
         {showHistory && searchHistory.length > 0 && (
           <View style={styles.historyContainer}>
-            <Text style={styles.historyTitle}>Recent Searches</Text>
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyTitle}>Recent Searches</Text>
+              <TouchableOpacity onPress={handleClearHistory}>
+                <Trash size={16} color="#9ca3af" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
             {searchHistory.map((item, index) => (
               <Pressable
                 key={index}
@@ -377,11 +392,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   historyTitle: {
     fontSize: 12,
     fontWeight: '600',
     color: '#9ca3af',
-    marginBottom: 8,
     textTransform: 'uppercase',
   },
   historyItem: {
