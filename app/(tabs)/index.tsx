@@ -44,8 +44,15 @@ export default function DiscoverScreen() {
   };
 
   const handleSearch = async () => {
-    if (!location.trim()) {
+    const trimmedLocation = location.trim();
+
+    if (!trimmedLocation) {
       setError('Please enter a location');
+      return;
+    }
+
+    if (trimmedLocation.length > 100) {
+      setError('Location must be less than 100 characters');
       return;
     }
 
@@ -54,17 +61,27 @@ export default function DiscoverScreen() {
     setShowHistory(false);
 
     try {
-      await addSearchHistory(location);
+      if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+        throw new Error('Missing Supabase configuration');
+      }
+
+      await addSearchHistory(trimmedLocation);
 
       const apiUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/discover-location`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ location }),
+        body: JSON.stringify({ location: trimmedLocation }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -72,19 +89,31 @@ export default function DiscoverScreen() {
       }
 
       const data = await response.json();
-      setResults(data);
 
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format from server');
+      }
+
+      setResults(data);
       loadSearchHistory();
 
       const newSavedPlaces = new Set<string>();
-      for (const place of [...data.places, ...data.restaurants, ...data.activities, ...data.foods]) {
-        if (await isSaved(place.name, location)) {
+      const places = [...(data.places || []), ...(data.restaurants || []), ...(data.activities || []), ...(data.foods || [])];
+      for (const place of places) {
+        if (place?.name && await isSaved(place.name, trimmedLocation)) {
           newSavedPlaces.add(place.name);
         }
       }
       setSavedPlaces(newSavedPlaces);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+      let errorMsg = 'Something went wrong';
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMsg = 'Request timed out. Please try again.';
+        } else {
+          errorMsg = err.message;
+        }
+      }
       setError(errorMsg);
       setTimeout(() => setError(''), 5000);
     } finally {
@@ -93,6 +122,12 @@ export default function DiscoverScreen() {
   };
 
   const handleSavePlace = async (placeName: string, placeType: string, description?: string, rating?: number) => {
+    if (!placeName?.trim() || !placeType?.trim()) {
+      setError('Invalid place information');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
     try {
       await savePlace(placeName, placeType as any, location, description, rating);
       setSavedPlaces(prev => new Set(prev).add(placeName));

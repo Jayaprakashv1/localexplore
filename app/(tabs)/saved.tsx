@@ -40,6 +40,12 @@ export default function SavedScreen() {
   };
 
   const handleRemove = async (placeId: string) => {
+    if (!placeId?.trim()) {
+      setError('Invalid place ID');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
     try {
       await unsavePlace(placeId);
       setPlaces(places.filter(p => p.id !== placeId));
