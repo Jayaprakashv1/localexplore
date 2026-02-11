@@ -67,6 +67,7 @@ export default function RegisterScreen() {
       showToast(error.message, 'error');
     } else {
       setSuccess(true);
+      setLoading(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Account created successfully!', 'success');
       setTimeout(() => {

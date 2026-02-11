@@ -36,7 +36,6 @@ export default function DiscoverScreen() {
   const [showHistory, setShowHistory] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
-  const cardScale = React.useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     loadSearchHistory();

@@ -61,7 +61,7 @@ export default function SavedScreen() {
     setToast({ visible: true, message, type });
   };
 
-  const handleRemove = async (placeId: string, placeName: string) => {
+  const handleRemovePlace = async (placeId: string, placeName: string) => {
     if (!placeId?.trim()) {
       setError('Invalid place ID');
       setTimeout(() => setError(''), 3000);
@@ -103,7 +103,7 @@ export default function SavedScreen() {
     return (
       <TouchableOpacity
         style={styles.swipeDeleteButton}
-        onPress={() => handleRemove(placeId, placeName)}
+        onPress={() => handleRemovePlace(placeId, placeName)}
       >
         <Trash2 size={24} color="#ffffff" strokeWidth={2} />
         <Text style={styles.swipeDeleteText}>Delete</Text>
@@ -239,7 +239,7 @@ export default function SavedScreen() {
                   </View>
                   <TouchableOpacity
                     style={styles.deleteButton}
-                    onPress={() => handleRemove(place.id, place.place_name)}
+                    onPress={() => handleRemovePlace(place.id, place.place_name)}
                   >
                     <Trash2 size={20} color="#dc2626" strokeWidth={2} />
                   </TouchableOpacity>
