@@ -169,6 +169,42 @@ export default function SavedScreen() {
           </View>
         ) : null}
 
+        {places.length > 0 && (
+          <View style={styles.filterContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <TouchableOpacity
+                style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
+                onPress={() => {
+                  setFilter('all');
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
+                  All ({places.length})
+                </Text>
+              </TouchableOpacity>
+              {['place', 'restaurant', 'activity', 'food'].map((type) => {
+                const count = places.filter(p => p.place_type === type).length;
+                if (count === 0) return null;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.filterChip, filter === type && styles.filterChipActive]}
+                    onPress={() => {
+                      setFilter(type);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Text style={[styles.filterText, filter === type && styles.filterTextActive]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)} ({count})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {places.length === 0 ? (
           <View style={styles.emptyState}>
             <Bookmark size={64} color="#d1d5db" strokeWidth={1.5} />
@@ -359,5 +395,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginTop: 4,
+  },
+  filterContainer: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  filterTextActive: {
+    color: '#ffffff',
   },
 });

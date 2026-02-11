@@ -423,6 +423,29 @@ export default function DiscoverScreen() {
               Enter a location to discover amazing places, restaurants, and
               activities
             </Text>
+            
+            <View style={styles.trendingSection}>
+              <View style={styles.trendingSectionHeader}>
+                <TrendingUp size={20} color="#2563eb" strokeWidth={2} />
+                <Text style={styles.trendingTitle}>Popular Destinations</Text>
+              </View>
+              <View style={styles.trendingGrid}>
+                {['Paris', 'Tokyo', 'New York', 'London', 'Dubai', 'Barcelona'].map((city) => (
+                  <TouchableOpacity
+                    key={city}
+                    style={styles.trendingChip}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setLocation(city);
+                      setShowHistory(false);
+                    }}
+                  >
+                    <MapPin size={16} color="#2563eb" strokeWidth={2} />
+                    <Text style={styles.trendingChipText}>{city}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -618,5 +641,44 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  trendingSection: {
+    marginTop: 32,
+    width: '100%',
+    paddingHorizontal: 16,
+  },
+  trendingSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  trendingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  trendingGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  trendingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  trendingChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563eb',
   },
 });
