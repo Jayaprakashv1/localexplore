@@ -7,16 +7,26 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
+  Animated,
+  Alert,
 } from 'react-native';
-import { Bookmark, Trash2 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { Bookmark, Trash2, Filter } from 'lucide-react-native';
 import { getSavedPlaces, unsavePlace } from '@/lib/database';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
+import Toast from '@/components/Toast';
+import { PlaceCardSkeleton } from '@/components/LoadingSkeleton';
+import { Swipeable } from 'react-native-gesture-handler';
 
 export default function SavedScreen() {
   const [places, setPlaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
+  const [filter, setFilter] = useState<string>('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -39,29 +49,86 @@ export default function SavedScreen() {
     }
   };
 
-  const handleRemove = async (placeId: string) => {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await loadSavedPlaces();
+    setRefreshing(false);
+    showToast('Refreshed!', 'success');
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
+  };
+
+  const handleRemove = async (placeId: string, placeName: string) => {
     if (!placeId?.trim()) {
       setError('Invalid place ID');
       setTimeout(() => setError(''), 3000);
       return;
     }
 
-    try {
-      await unsavePlace(placeId);
-      setPlaces(places.filter(p => p.id !== placeId));
-      setError('');
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to remove place';
-      setError(errorMsg);
-      setTimeout(() => setError(''), 3000);
-    }
+    Alert.alert(
+      'Remove Place',
+      `Are you sure you want to remove "${placeName}" from saved places?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              await unsavePlace(placeId);
+              setPlaces(places.filter(p => p.id !== placeId));
+              showToast('Place removed successfully', 'success');
+              setError('');
+            } catch (err) {
+              const errorMsg = err instanceof Error ? err.message : 'Failed to remove place';
+              setError(errorMsg);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              showToast(errorMsg, 'error');
+              setTimeout(() => setError(''), 3000);
+            }
+          },
+        },
+      ]
+    );
   };
+
+  const renderRightActions = (placeId: string, placeName: string) => {
+    return (
+      <TouchableOpacity
+        style={styles.swipeDeleteButton}
+        onPress={() => handleRemove(placeId, placeName)}
+      >
+        <Trash2 size={24} color="#ffffff" strokeWidth={2} />
+        <Text style={styles.swipeDeleteText}>Delete</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const filteredPlaces = filter === 'all' 
+    ? places 
+    : places.filter(p => p.place_type === filter);
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2563eb" />
+        <View style={styles.header}>
+          <View style={styles.iconHeader}>
+            <Bookmark size={32} color="#2563eb" strokeWidth={2} />
+          </View>
+          <Text style={styles.title}>Saved Places</Text>
+          <Text style={styles.subtitle}>Loading your favorites...</Text>
+        </View>
+        <View style={styles.placesContainer}>
+          <PlaceCardSkeleton />
+          <PlaceCardSkeleton />
+          <PlaceCardSkeleton />
         </View>
       </SafeAreaView>
     );
@@ -69,14 +136,30 @@ export default function SavedScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#2563eb"
+            colors={['#2563eb']}
+          />
+        }
+      >
         <View style={styles.header}>
           <View style={styles.iconHeader}>
             <Bookmark size={32} color="#2563eb" strokeWidth={2} />
           </View>
           <Text style={styles.title}>Saved Places</Text>
           <Text style={styles.subtitle}>
-            Your favorite destinations and spots ({places.length})
+            Your favorite destinations and spots ({filteredPlaces.length})
           </Text>
         </View>
 
@@ -96,29 +179,36 @@ export default function SavedScreen() {
           </View>
         ) : (
           <View style={styles.placesContainer}>
-            {places.map((place) => (
-              <View key={place.id} style={styles.card}>
-                <View style={styles.cardContent}>
-                  <Text style={styles.location}>{place.location}</Text>
-                  <Text style={styles.placeName}>{place.place_name}</Text>
-                  <Text style={styles.placeType}>{place.place_type}</Text>
-                  {place.description && (
-                    <Text style={styles.description}>{place.description}</Text>
-                  )}
-                  {place.rating && (
-                    <Text style={styles.rating}>⭐ {place.rating}/5</Text>
-                  )}
-                  <Text style={styles.dateAdded}>
-                    Saved {new Date(place.created_at).toLocaleDateString()}
-                  </Text>
+            {filteredPlaces.map((place) => (
+              <Swipeable
+                key={place.id}
+                renderRightActions={() => renderRightActions(place.id, place.place_name)}
+                overshootRight={false}
+                onSwipeableOpen={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              >
+                <View style={styles.card}>
+                  <View style={styles.cardContent}>
+                    <Text style={styles.location}>{place.location}</Text>
+                    <Text style={styles.placeName}>{place.place_name}</Text>
+                    <Text style={styles.placeType}>{place.place_type}</Text>
+                    {place.description && (
+                      <Text style={styles.description}>{place.description}</Text>
+                    )}
+                    {place.rating && (
+                      <Text style={styles.rating}>⭐ {place.rating}/5</Text>
+                    )}
+                    <Text style={styles.dateAdded}>
+                      Saved {new Date(place.created_at).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleRemove(place.id, place.place_name)}
+                  >
+                    <Trash2 size={20} color="#dc2626" strokeWidth={2} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleRemove(place.id)}
-                >
-                  <Trash2 size={20} color="#dc2626" strokeWidth={2} />
-                </TouchableOpacity>
-              </View>
+              </Swipeable>
             ))}
           </View>
         )}
@@ -254,5 +344,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  swipeDeleteButton: {
+    backgroundColor: '#dc2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 100,
+    borderRadius: 12,
+    marginBottom: 12,
+    marginLeft: 8,
+  },
+  swipeDeleteText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

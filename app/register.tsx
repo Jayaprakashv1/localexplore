@@ -10,9 +10,11 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Link, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { MapPin } from 'lucide-react-native';
+import { MapPin, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
+import Toast from '@/components/Toast';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -21,38 +23,55 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
   const { signUp } = useAuth();
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
+  };
 
   const handleRegister = async () => {
     if (!email || !password || !confirmPassword) {
       setError('Please fill in all fields');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showToast('Please fill in all fields', 'error');
       return;
     }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showToast('Passwords do not match', 'error');
       return;
     }
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showToast('Password must be at least 6 characters', 'error');
       return;
     }
 
     setLoading(true);
     setError('');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const { error } = await signUp(email, password);
 
     if (error) {
       setError(error.message);
       setLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(error.message, 'error');
     } else {
       setSuccess(true);
-      setLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Account created successfully!', 'success');
       setTimeout(() => {
         router.replace('/(tabs)');
-      }, 1500);
+      }, 2000);
     }
   };
 
@@ -60,12 +79,13 @@ export default function RegisterScreen() {
     return (
       <View style={styles.successContainer}>
         <View style={styles.iconContainer}>
-          <MapPin size={48} color="#059669" strokeWidth={2} />
+          <CheckCircle size={64} color="#059669" strokeWidth={2} />
         </View>
         <Text style={styles.successTitle}>Account Created!</Text>
         <Text style={styles.successText}>
           Welcome to Travel Discover. Redirecting...
         </Text>
+        <ActivityIndicator size="large" color="#2563eb" style={{ marginTop: 20 }} />
       </View>
     );
   }
@@ -75,6 +95,12 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
