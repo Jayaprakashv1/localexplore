@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Search, Bookmark, User } from 'lucide-react-native';
+import { Platform } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -12,13 +13,21 @@ export default function TabLayout() {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#e5e7eb',
-          height: 60,
-          paddingBottom: 8,
+          height: Platform.OS === 'ios' ? 88 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
           paddingTop: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
+          elevation: 8,
         },
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
         },
       }}
     >
