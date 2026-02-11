@@ -8,16 +8,36 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
-import { User, LogOut, Mail, Calendar } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { User, LogOut, Mail, Calendar, Shield } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
+import Toast from '@/components/Toast';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Simulate refresh - in a real app, you would reload user data
+    setTimeout(() => {
+      setRefreshing(false);
+      showToast('Profile refreshed!', 'success');
+    }, 1000);
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
+  };
 
   const handleLogout = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       {
         text: 'Cancel',
@@ -30,9 +50,11 @@ export default function ProfileScreen() {
           setLoading(true);
           try {
             await signOut();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             router.replace('/login');
           } catch (error) {
             setLoading(false);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert('Error', 'Failed to sign out');
           }
         },
@@ -43,7 +65,23 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#2563eb"
+            colors={['#2563eb']}
+          />
+        }
+      >
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <User size={48} color="#2563eb" strokeWidth={2} />

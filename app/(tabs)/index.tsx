@@ -10,9 +10,14 @@ import {
   ActivityIndicator,
   Pressable,
   FlatList,
+  RefreshControl,
+  Animated,
 } from 'react-native';
-import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X, Trash } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X, Trash, TrendingUp } from 'lucide-react-native';
 import { addSearchHistory, getSearchHistory, savePlace, isSaved, getSavedPlacesByLocation, clearSearchHistory } from '@/lib/database';
+import Toast from '@/components/Toast';
+import { PlaceCardSkeleton } from '@/components/LoadingSkeleton';
 
 type LocationData = {
   places: Array<{ name: string; description: string; rating?: number }>;
@@ -29,6 +34,8 @@ export default function DiscoverScreen() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [savedPlaces, setSavedPlaces] = useState<Set<string>>(new Set());
   const [showHistory, setShowHistory] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
 
   useEffect(() => {
     loadSearchHistory();
@@ -43,22 +50,37 @@ export default function DiscoverScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await loadSearchHistory();
+    setRefreshing(false);
+    setToast({ visible: true, message: 'Refreshed!', type: 'success' });
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
+  };
+
   const handleSearch = async () => {
     const trimmedLocation = location.trim();
 
     if (!trimmedLocation) {
       setError('Please enter a location');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
 
     if (trimmedLocation.length > 100) {
       setError('Location must be less than 100 characters');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
 
     setLoading(true);
     setError('');
     setShowHistory(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
@@ -96,6 +118,8 @@ export default function DiscoverScreen() {
 
       setResults(data);
       loadSearchHistory();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(`Found ${(data.places?.length || 0) + (data.restaurants?.length || 0)} results!`, 'success');
 
       const newSavedPlaces = new Set<string>();
       const places = [...(data.places || []), ...(data.restaurants || []), ...(data.activities || []), ...(data.foods || [])];
@@ -115,6 +139,8 @@ export default function DiscoverScreen() {
         }
       }
       setError(errorMsg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(errorMsg, 'error');
       setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
@@ -124,25 +150,32 @@ export default function DiscoverScreen() {
   const handleSavePlace = async (placeName: string, placeType: string, description?: string, rating?: number) => {
     if (!placeName?.trim() || !placeType?.trim()) {
       setError('Invalid place information');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setTimeout(() => setError(''), 3000);
       return;
     }
 
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await savePlace(placeName, placeType as any, location, description, rating);
       setSavedPlaces(prev => new Set(prev).add(placeName));
+      showToast('Place saved successfully!', 'success');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to save place';
       if (errorMsg === 'This place is already saved') {
         setSavedPlaces(prev => new Set(prev).add(placeName));
+        showToast('Already saved', 'info');
       } else {
         setError(errorMsg);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showToast(errorMsg, 'error');
         setTimeout(() => setError(''), 3000);
       }
     }
   };
 
   const handleQuickSearch = (loc: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setLocation(loc);
     setTimeout(() => {
       setLocation(loc);
@@ -152,25 +185,46 @@ export default function DiscoverScreen() {
 
   const handleClearHistory = async () => {
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await clearSearchHistory();
       setSearchHistory([]);
       setShowHistory(false);
+      showToast('Search history cleared', 'success');
     } catch (err) {
       console.error('Failed to clear history:', err);
+      showToast('Failed to clear history', 'error');
     }
   };
 
   const PlaceCard = ({ title, description, type, rating }: any) => {
     const isSavedPlace = savedPlaces.has(title);
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+    const handlePress = () => {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      handleSavePlace(title, type, description, rating);
+    };
+
     return (
-      <View style={styles.card}>
+      <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleContainer}>
             <Text style={styles.cardTitle}>{title}</Text>
             {rating && <Text style={styles.rating}>⭐ {rating}/5</Text>}
           </View>
           <TouchableOpacity
-            onPress={() => handleSavePlace(title, type, description, rating)}
+            onPress={handlePress}
             style={styles.saveButton}
           >
             <Bookmark
@@ -182,13 +236,30 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.cardDescription}>{description}</Text>
-      </View>
+      </Animated.View>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
+      <ScrollView
+        style={styles.scrollView}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#2563eb"
+            colors={['#2563eb']}
+          />
+        }
+      >
         <View style={styles.header}>
           <View style={styles.iconHeader}>
             <MapPin size={32} color="#2563eb" strokeWidth={2} />
@@ -259,7 +330,19 @@ export default function DiscoverScreen() {
           </View>
         ) : null}
 
-        {results ? (
+        {loading ? (
+          <View style={styles.resultsContainer}>
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Landmark size={24} color="#2563eb" strokeWidth={2} />
+                <Text style={styles.sectionTitle}>Loading...</Text>
+              </View>
+              <PlaceCardSkeleton />
+              <PlaceCardSkeleton />
+              <PlaceCardSkeleton />
+            </View>
+          </View>
+        ) : results ? (
           <View style={styles.resultsContainer}>
             {results.places.length > 0 && (
               <View style={styles.section}>
@@ -339,6 +422,29 @@ export default function DiscoverScreen() {
               Enter a location to discover amazing places, restaurants, and
               activities
             </Text>
+            
+            <View style={styles.trendingSection}>
+              <View style={styles.trendingSectionHeader}>
+                <TrendingUp size={20} color="#2563eb" strokeWidth={2} />
+                <Text style={styles.trendingTitle}>Popular Destinations</Text>
+              </View>
+              <View style={styles.trendingGrid}>
+                {['Paris', 'Tokyo', 'New York', 'London', 'Dubai', 'Barcelona'].map((city) => (
+                  <TouchableOpacity
+                    key={city}
+                    style={styles.trendingChip}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setLocation(city);
+                      setShowHistory(false);
+                    }}
+                  >
+                    <MapPin size={16} color="#2563eb" strokeWidth={2} />
+                    <Text style={styles.trendingChipText}>{city}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -534,5 +640,44 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  trendingSection: {
+    marginTop: 32,
+    width: '100%',
+    paddingHorizontal: 16,
+  },
+  trendingSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  trendingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  trendingGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  trendingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  trendingChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563eb',
   },
 });

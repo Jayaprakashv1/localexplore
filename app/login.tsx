@@ -9,33 +9,49 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Link, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { MapPin } from 'lucide-react-native';
+import { MapPin, Eye, EyeOff } from 'lucide-react-native';
+import Toast from '@/components/Toast';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
   const { signIn } = useAuth();
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
       setError('Please fill in all fields');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showToast('Please fill in all fields', 'error');
       return;
     }
 
     setLoading(true);
     setError('');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const { error } = await signIn(email, password);
 
     if (error) {
       setError(error.message);
       setLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast(error.message, 'error');
     } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Welcome back!', 'success');
       router.replace('/(tabs)');
     }
   };
@@ -45,6 +61,12 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -82,15 +104,30 @@ export default function LoginScreen() {
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              placeholderTextColor="#9ca3af"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!loading}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor="#9ca3af"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => {
+                  setShowPassword(!showPassword);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                {showPassword ? (
+                  <EyeOff size={20} color="#6b7280" strokeWidth={2} />
+                ) : (
+                  <Eye size={20} color="#6b7280" strokeWidth={2} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -186,6 +223,23 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#111827',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+  },
+  eyeIcon: {
+    padding: 12,
   },
   button: {
     backgroundColor: '#2563eb',
