@@ -311,8 +311,7 @@ export async function addTripItem(
   const { data: countData } = await supabase
     .from('trip_items')
     .select('id', { count: 'exact' })
-    .eq('trip_id', tripId)
-    .eq('user_id', user.id);
+    .eq('trip_id', tripId);
 
   const visitOrder = countData?.length || 0;
 
