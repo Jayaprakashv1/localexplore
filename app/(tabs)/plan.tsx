@@ -81,6 +81,11 @@ export default function PlanScreen() {
 
   const loadTrips = async () => {
     setLoading(true);
+    // Clear item/member caches so re-expanded trips always show fresh data
+    setTripItems({});
+    setTripMembers({});
+    setLoadingItems({});
+    setExpandedTripId(null);
     try {
       const data = await getTrips();
       setTrips(data);
@@ -107,6 +112,7 @@ export default function PlanScreen() {
     }
     setExpandedTripId(tripId);
     if (!tripItems[tripId]) {
+      // First expand — load items and members together
       setLoadingItems(prev => ({ ...prev, [tripId]: true }));
       try {
         const [items, members] = await Promise.all([
@@ -120,6 +126,9 @@ export default function PlanScreen() {
       } finally {
         setLoadingItems(prev => ({ ...prev, [tripId]: false }));
       }
+    } else {
+      // Re-expand — items are cached; refresh members to pick up new join requests
+      reloadMembers(tripId);
     }
   };
 
@@ -180,6 +189,10 @@ export default function PlanScreen() {
               await deleteTrip(tripId);
               setTrips(prev => prev.filter(t => t.id !== tripId));
               if (expandedTripId === tripId) setExpandedTripId(null);
+              // Clean up cached data for the deleted trip
+              setTripItems(prev => { const n = { ...prev }; delete n[tripId]; return n; });
+              setTripMembers(prev => { const n = { ...prev }; delete n[tripId]; return n; });
+              setLoadingItems(prev => { const n = { ...prev }; delete n[tripId]; return n; });
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               showToast('Trip deleted', 'success');
             } catch {
@@ -266,6 +279,8 @@ export default function PlanScreen() {
       );
       showToast(`${email} approved!`, 'success');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Re-fetch members to ensure server state matches local state
+      reloadMembers(tripId);
     } catch {
       showToast('Failed to approve request', 'error');
     }
@@ -287,6 +302,8 @@ export default function PlanScreen() {
               ),
             }));
             showToast('Request rejected', 'info');
+            // Re-fetch members to ensure server state matches local state
+            reloadMembers(tripId);
           } catch {
             showToast('Failed to reject request', 'error');
           }
@@ -647,9 +664,10 @@ export default function PlanScreen() {
                       {/* Members section (only for public trips) */}
                       {trip.is_public && !isLoadingItems && (
                         <View style={styles.membersSection}>
-                          <Text style={styles.membersSectionTitle}>
-                            <Users size={14} color="#374151" strokeWidth={2} /> Members
-                          </Text>
+                          <View style={styles.membersSectionTitleRow}>
+                            <Users size={14} color="#374151" strokeWidth={2} />
+                            <Text style={styles.membersSectionTitle}>Members</Text>
+                          </View>
 
                           {/* Pending requests */}
                           {pendingRequests.length > 0 && (

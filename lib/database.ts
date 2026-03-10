@@ -269,11 +269,13 @@ export async function getTripItems(tripId: string): Promise<TripItem[]> {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return [];
 
+  // RLS handles row-level access: the policy allows the trip owner (auth.uid() = user_id)
+  // AND approved trip members (is_approved_trip_member). We must NOT add an extra
+  // .eq('user_id', user.id) filter here or approved members in the Feed would get 0 rows.
   const { data, error } = await supabase
     .from('trip_items')
     .select('*')
     .eq('trip_id', tripId)
-    .eq('user_id', user.id)
     .order('visit_order', { ascending: true })
     .order('created_at', { ascending: true });
 
