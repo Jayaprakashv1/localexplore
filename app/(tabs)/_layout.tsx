@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Search, Bookmark, User } from 'lucide-react-native';
+import { Search, Bookmark, User, Map } from 'lucide-react-native';
 import { Platform } from 'react-native';
 
 export default function TabLayout() {
@@ -46,6 +46,15 @@ export default function TabLayout() {
           title: 'Saved',
           tabBarIcon: ({ size, color }) => (
             <Bookmark size={size} color={color} strokeWidth={2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="plan"
+        options={{
+          title: 'Plan',
+          tabBarIcon: ({ size, color }) => (
+            <Map size={size} color={color} strokeWidth={2} />
           ),
         }}
       />

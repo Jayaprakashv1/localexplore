@@ -10,9 +10,12 @@ import {
   RefreshControl,
   Animated,
   Alert,
+  Share,
+  Linking,
+  Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Bookmark, Trash2, Filter } from 'lucide-react-native';
+import { Bookmark, Trash2, Filter, Share2, Navigation } from 'lucide-react-native';
 import { getSavedPlaces, unsavePlace } from '@/lib/database';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
@@ -98,6 +101,34 @@ export default function SavedScreen() {
       ]
     );
   };
+
+  const handleSharePlace = async (place: any) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const ratingText = place.rating ? `\nRating: ⭐ ${place.rating}/5` : '';
+      const descText = place.description ? `\n${place.description}` : '';
+      await Share.share({
+        message: `Check out ${place.place_name} in ${place.location}!${descText}${ratingText}\n\nDiscovered via Travel Discover app.`,
+        title: place.place_name,
+      });
+    } catch {
+      // User cancelled share
+    }
+  };
+
+  const handleGetDirections = (place: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const query = encodeURIComponent(`${place.place_name}, ${place.location}`);
+    const url = Platform.select({
+      ios: `maps:0,0?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
+    }) as string;
+    Linking.openURL(url).catch(() => {
+      showToast('Could not open Maps', 'error');
+    });
+  };
+
 
   const renderRightActions = (placeId: string, placeName: string) => {
     return (
@@ -236,6 +267,22 @@ export default function SavedScreen() {
                     <Text style={styles.dateAdded}>
                       Saved {new Date(place.created_at).toLocaleDateString()}
                     </Text>
+                    <View style={styles.cardActionsRow}>
+                      <TouchableOpacity
+                        style={styles.cardActionButton}
+                        onPress={() => handleGetDirections(place)}
+                      >
+                        <Navigation size={14} color="#2563eb" strokeWidth={2} />
+                        <Text style={styles.cardActionText}>Directions</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cardActionButton}
+                        onPress={() => handleSharePlace(place)}
+                      >
+                        <Share2 size={14} color="#2563eb" strokeWidth={2} />
+                        <Text style={styles.cardActionText}>Share</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   <TouchableOpacity
                     style={styles.deleteButton}
@@ -352,6 +399,27 @@ const styles = StyleSheet.create({
   dateAdded: {
     fontSize: 12,
     color: '#9ca3af',
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  cardActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  cardActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   deleteButton: {
     padding: 8,

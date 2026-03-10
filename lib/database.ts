@@ -2,6 +2,31 @@ import { supabase } from './supabase';
 
 export type PlaceType = 'place' | 'restaurant' | 'activity' | 'food';
 
+export interface Trip {
+  id: string;
+  user_id: string;
+  title: string;
+  destination: string;
+  start_date?: string;
+  end_date?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface TripItem {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  place_name: string;
+  place_type: PlaceType;
+  location: string;
+  description?: string;
+  rating?: number;
+  notes?: string;
+  visit_order: number;
+  created_at: string;
+}
+
 export interface SavedPlace {
   id: string;
   place_name: string;
@@ -156,6 +181,146 @@ export async function clearSearchHistory() {
   const { error } = await supabase
     .from('search_history')
     .delete()
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}
+
+// ── Trip Planner ─────────────────────────────────────────────────────────────
+
+export async function createTrip(
+  title: string,
+  destination: string,
+  start_date?: string,
+  end_date?: string
+): Promise<Trip> {
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  if (!title?.trim() || !destination?.trim()) {
+    throw new Error('Trip title and destination are required');
+  }
+
+  const { data, error } = await supabase
+    .from('trips')
+    .insert({
+      user_id: user.id,
+      title: title.trim(),
+      destination: destination.trim(),
+      start_date: start_date || null,
+      end_date: end_date || null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getTrips(): Promise<Trip[]> {
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return [];
+
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deleteTrip(tripId: string): Promise<void> {
+  if (!tripId?.trim()) throw new Error('Trip ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', tripId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}
+
+export async function getTripItems(tripId: string): Promise<TripItem[]> {
+  if (!tripId?.trim()) return [];
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return [];
+
+  const { data, error } = await supabase
+    .from('trip_items')
+    .select('*')
+    .eq('trip_id', tripId)
+    .eq('user_id', user.id)
+    .order('visit_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addTripItem(
+  tripId: string,
+  place_name: string,
+  place_type: PlaceType,
+  location: string,
+  description?: string,
+  rating?: number
+): Promise<void> {
+  if (!tripId?.trim() || !place_name?.trim() || !location?.trim()) {
+    throw new Error('Trip ID, place name, and location are required');
+  }
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { data: existing } = await supabase
+    .from('trip_items')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('user_id', user.id)
+    .eq('place_name', place_name.trim())
+    .maybeSingle();
+
+  if (existing) throw new Error('This place is already in the trip');
+
+  const { data: countData } = await supabase
+    .from('trip_items')
+    .select('id', { count: 'exact' })
+    .eq('trip_id', tripId)
+    .eq('user_id', user.id);
+
+  const visitOrder = countData?.length || 0;
+
+  const { error } = await supabase.from('trip_items').insert({
+    trip_id: tripId,
+    user_id: user.id,
+    place_name: place_name.trim(),
+    place_type,
+    location: location.trim(),
+    description: description?.trim() || null,
+    rating: rating && rating > 0 && rating <= 5 ? rating : null,
+    visit_order: visitOrder,
+  });
+
+  if (error) throw error;
+}
+
+export async function removeTripItem(itemId: string): Promise<void> {
+  if (!itemId?.trim()) throw new Error('Item ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('trip_items')
+    .delete()
+    .eq('id', itemId)
     .eq('user_id', user.id);
 
   if (error) throw error;

@@ -12,12 +12,14 @@ import {
   FlatList,
   RefreshControl,
   Animated,
+  Share,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X, Trash, TrendingUp } from 'lucide-react-native';
+import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X, Trash, TrendingUp, Share2 } from 'lucide-react-native';
 import { addSearchHistory, getSearchHistory, savePlace, isSaved, getSavedPlacesByLocation, clearSearchHistory } from '@/lib/database';
 import Toast from '@/components/Toast';
 import { PlaceCardSkeleton } from '@/components/LoadingSkeleton';
+import WeatherWidget from '@/components/WeatherWidget';
 
 type LocationData = {
   places: Array<{ name: string; description: string; rating?: number }>;
@@ -216,6 +218,20 @@ export default function DiscoverScreen() {
       handleSavePlace(title, type, description, rating);
     };
 
+    const handleShare = async () => {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const ratingText = rating ? `\nRating: ⭐ ${rating}/5` : '';
+        const descText = description ? `\n${description}` : '';
+        await Share.share({
+          message: `Check out ${title} in ${location}!${descText}${ratingText}\n\nDiscovered via Travel Discover app.`,
+          title: title,
+        });
+      } catch {
+        // User cancelled share – no action needed
+      }
+    };
+
     return (
       <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
         <View style={styles.cardHeader}>
@@ -223,17 +239,22 @@ export default function DiscoverScreen() {
             <Text style={styles.cardTitle}>{title}</Text>
             {rating && <Text style={styles.rating}>⭐ {rating}/5</Text>}
           </View>
-          <TouchableOpacity
-            onPress={handlePress}
-            style={styles.saveButton}
-          >
-            <Bookmark
-              size={20}
-              color={isSavedPlace ? '#2563eb' : '#d1d5db'}
-              strokeWidth={2}
-              fill={isSavedPlace ? '#2563eb' : 'none'}
-            />
-          </TouchableOpacity>
+          <View style={styles.cardActions}>
+            <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
+              <Share2 size={18} color="#6b7280" strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handlePress}
+              style={styles.actionButton}
+            >
+              <Bookmark
+                size={20}
+                color={isSavedPlace ? '#2563eb' : '#d1d5db'}
+                strokeWidth={2}
+                fill={isSavedPlace ? '#2563eb' : 'none'}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.cardDescription}>{description}</Text>
       </Animated.View>
@@ -344,6 +365,7 @@ export default function DiscoverScreen() {
           </View>
         ) : results ? (
           <View style={styles.resultsContainer}>
+            <WeatherWidget location={location} />
             {results.places.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
@@ -619,7 +641,12 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
     fontWeight: '600',
   },
-  saveButton: {
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionButton: {
     padding: 8,
   },
   emptyState: {
