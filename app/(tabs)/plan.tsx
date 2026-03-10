@@ -1096,11 +1096,16 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     gap: 6,
   },
+  membersSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
   membersSectionTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#374151',
-    marginBottom: 4,
   },
   membersSubTitle: {
     fontSize: 12,

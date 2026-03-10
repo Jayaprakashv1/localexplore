@@ -64,8 +64,8 @@ export default function DiscoverScreen() {
     setToast({ visible: true, message, type });
   };
 
-  const handleSearch = async () => {
-    const trimmedLocation = location.trim();
+  const handleSearch = async (locationOverride?: string) => {
+    const trimmedLocation = (locationOverride ?? location).trim();
 
     if (!trimmedLocation) {
       setError('Please enter a location');
@@ -179,10 +179,8 @@ export default function DiscoverScreen() {
   const handleQuickSearch = (loc: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setLocation(loc);
-    setTimeout(() => {
-      setLocation(loc);
-      setShowHistory(false);
-    }, 50);
+    setShowHistory(false);
+    handleSearch(loc);
   };
 
   const handleClearHistory = async () => {
@@ -305,7 +303,7 @@ export default function DiscoverScreen() {
               placeholderTextColor="#9ca3af"
               value={location}
               onChangeText={setLocation}
-              onSubmitEditing={handleSearch}
+              onSubmitEditing={() => handleSearch()}
               onFocus={() => searchHistory.length > 0 && setShowHistory(true)}
               editable={!loading}
             />
@@ -313,7 +311,7 @@ export default function DiscoverScreen() {
 
           <TouchableOpacity
             style={[styles.searchButton, loading && styles.buttonDisabled]}
-            onPress={handleSearch}
+            onPress={() => handleSearch()}
             disabled={loading}
           >
             {loading ? (
@@ -459,6 +457,7 @@ export default function DiscoverScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       setLocation(city);
                       setShowHistory(false);
+                      handleSearch(city);
                     }}
                   >
                     <MapPin size={16} color="#2563eb" strokeWidth={2} />

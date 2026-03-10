@@ -99,19 +99,30 @@ export default function FeedScreen() {
     setExpandedTripId(tripId);
 
     // Only load details if user is an approved member
-    if (trip.my_status === 'approved' && !tripItems[tripId]) {
-      setLoadingDetails(prev => ({ ...prev, [tripId]: true }));
-      try {
-        const [items, members] = await Promise.all([
-          getTripItems(tripId),
-          getTripMembers(tripId),
-        ]);
-        setTripItems(prev => ({ ...prev, [tripId]: items }));
-        setTripMembers(prev => ({ ...prev, [tripId]: members }));
-      } catch {
-        showToast('Failed to load trip details', 'error');
-      } finally {
-        setLoadingDetails(prev => ({ ...prev, [tripId]: false }));
+    if (trip.my_status === 'approved') {
+      if (!tripItems[tripId]) {
+        // First expand — load items and members together
+        setLoadingDetails(prev => ({ ...prev, [tripId]: true }));
+        try {
+          const [items, members] = await Promise.all([
+            getTripItems(tripId),
+            getTripMembers(tripId),
+          ]);
+          setTripItems(prev => ({ ...prev, [tripId]: items }));
+          setTripMembers(prev => ({ ...prev, [tripId]: members }));
+        } catch {
+          showToast('Failed to load trip details', 'error');
+        } finally {
+          setLoadingDetails(prev => ({ ...prev, [tripId]: false }));
+        }
+      } else {
+        // Re-expand — items are cached; refresh members to pick up latest approvals
+        try {
+          const members = await getTripMembers(tripId);
+          setTripMembers(prev => ({ ...prev, [tripId]: members }));
+        } catch {
+          // Non-critical — silently ignore members refresh failure
+        }
       }
     }
   };
