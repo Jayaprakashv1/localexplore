@@ -10,7 +10,22 @@ export interface Trip {
   start_date?: string;
   end_date?: string;
   notes?: string;
+  is_public: boolean;
+  member_count: number;
   created_at: string;
+}
+
+export interface TripMember {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  email: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
+export interface PublicTrip extends Trip {
+  my_status: 'pending' | 'approved' | 'rejected' | null;
 }
 
 export interface TripItem {
@@ -192,7 +207,8 @@ export async function createTrip(
   title: string,
   destination: string,
   start_date?: string,
-  end_date?: string
+  end_date?: string,
+  is_public: boolean = false
 ): Promise<Trip> {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new Error('User not authenticated');
@@ -209,6 +225,7 @@ export async function createTrip(
       destination: destination.trim(),
       start_date: start_date || null,
       end_date: end_date || null,
+      is_public,
     })
     .select()
     .single();
@@ -324,4 +341,154 @@ export async function removeTripItem(itemId: string): Promise<void> {
     .eq('user_id', user.id);
 
   if (error) throw error;
+}
+
+// ── Trip Visibility ───────────────────────────────────────────────────────────
+
+export async function updateTripVisibility(tripId: string, is_public: boolean): Promise<void> {
+  if (!tripId?.trim()) throw new Error('Trip ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('trips')
+    .update({ is_public })
+    .eq('id', tripId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}
+
+// ── Trip Members ──────────────────────────────────────────────────────────────
+
+export async function getTripMembers(tripId: string): Promise<TripMember[]> {
+  if (!tripId?.trim()) return [];
+
+  const { data, error } = await supabase
+    .from('trip_members')
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function requestToJoinTrip(tripId: string): Promise<void> {
+  if (!tripId?.trim()) throw new Error('Trip ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const email = user.email;
+  if (!email) throw new Error('User email not available');
+
+  const { error } = await supabase.from('trip_members').insert({
+    trip_id: tripId,
+    user_id: user.id,
+    email,
+    status: 'pending',
+  });
+
+  if (error) {
+    if (error.code === '23505') throw new Error('You have already requested to join this trip');
+    throw error;
+  }
+}
+
+export async function approveJoinRequest(memberId: string): Promise<void> {
+  if (!memberId?.trim()) throw new Error('Member ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('trip_members')
+    .update({ status: 'approved' })
+    .eq('id', memberId);
+
+  if (error) throw error;
+}
+
+export async function rejectJoinRequest(memberId: string): Promise<void> {
+  if (!memberId?.trim()) throw new Error('Member ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('trip_members')
+    .update({ status: 'rejected' })
+    .eq('id', memberId);
+
+  if (error) throw error;
+}
+
+export async function cancelJoinRequest(tripId: string): Promise<void> {
+  if (!tripId?.trim()) throw new Error('Trip ID is required');
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('trip_members')
+    .delete()
+    .eq('trip_id', tripId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}
+
+export async function getMyMembershipStatus(
+  tripId: string
+): Promise<'pending' | 'approved' | 'rejected' | null> {
+  if (!tripId?.trim()) return null;
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return null;
+
+  const { data, error } = await supabase
+    .from('trip_members')
+    .select('status')
+    .eq('trip_id', tripId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data?.status as 'pending' | 'approved' | 'rejected') || null;
+}
+
+// ── Public Feed ───────────────────────────────────────────────────────────────
+
+export async function getPublicTrips(): Promise<PublicTrip[]> {
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return [];
+
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('is_public', true)
+    .neq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  if (!trips || trips.length === 0) return [];
+
+  const tripIds = trips.map(t => t.id);
+
+  const { data: myMemberships } = await supabase
+    .from('trip_members')
+    .select('trip_id, status')
+    .eq('user_id', user.id)
+    .in('trip_id', tripIds);
+
+  const membershipMap = new Map(
+    (myMemberships || []).map(m => [m.trip_id, m.status as 'pending' | 'approved' | 'rejected'])
+  );
+
+  return trips.map(trip => ({
+    ...trip,
+    my_status: membershipMap.get(trip.id) || null,
+  }));
 }

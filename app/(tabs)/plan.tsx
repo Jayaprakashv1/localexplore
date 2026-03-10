@@ -5,6 +5,7 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  Switch,
   TouchableOpacity,
   TextInput,
   RefreshControl,
@@ -14,7 +15,7 @@ import {
   Pressable,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Map, Plus, Trash2, ChevronDown, ChevronUp, Calendar, MapPin, X, Navigation } from 'lucide-react-native';
+import { Map, Plus, Trash2, ChevronDown, ChevronUp, Calendar, MapPin, X, Users, Globe, Lock, Check, XCircle } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   createTrip,
@@ -24,8 +25,13 @@ import {
   addTripItem,
   removeTripItem,
   getSavedPlaces,
+  getTripMembers,
+  approveJoinRequest,
+  rejectJoinRequest,
+  updateTripVisibility,
   Trip,
   TripItem,
+  TripMember,
   SavedPlace,
 } from '@/lib/database';
 import Toast from '@/components/Toast';
@@ -45,6 +51,7 @@ export default function PlanScreen() {
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [tripItems, setTripItems] = useState<Record<string, TripItem[]>>({});
   const [loadingItems, setLoadingItems] = useState<Record<string, boolean>>({});
+  const [tripMembers, setTripMembers] = useState<Record<string, TripMember[]>>({});
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
 
   // New trip modal state
@@ -53,6 +60,7 @@ export default function PlanScreen() {
   const [newDestination, setNewDestination] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
   const [newEndDate, setNewEndDate] = useState('');
+  const [newIsPublic, setNewIsPublic] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Add-places modal state
@@ -101,13 +109,26 @@ export default function PlanScreen() {
     if (!tripItems[tripId]) {
       setLoadingItems(prev => ({ ...prev, [tripId]: true }));
       try {
-        const items = await getTripItems(tripId);
+        const [items, members] = await Promise.all([
+          getTripItems(tripId),
+          getTripMembers(tripId),
+        ]);
         setTripItems(prev => ({ ...prev, [tripId]: items }));
+        setTripMembers(prev => ({ ...prev, [tripId]: members }));
       } catch {
         showToast('Failed to load trip details', 'error');
       } finally {
         setLoadingItems(prev => ({ ...prev, [tripId]: false }));
       }
+    }
+  };
+
+  const reloadMembers = async (tripId: string) => {
+    try {
+      const members = await getTripMembers(tripId);
+      setTripMembers(prev => ({ ...prev, [tripId]: members }));
+    } catch {
+      showToast('Failed to refresh members', 'error');
     }
   };
 
@@ -123,7 +144,8 @@ export default function PlanScreen() {
         newTitle.trim(),
         newDestination.trim(),
         newStartDate.trim() || undefined,
-        newEndDate.trim() || undefined
+        newEndDate.trim() || undefined,
+        newIsPublic
       );
       setTrips(prev => [trip, ...prev]);
       setModalVisible(false);
@@ -131,6 +153,7 @@ export default function PlanScreen() {
       setNewDestination('');
       setNewStartDate('');
       setNewEndDate('');
+      setNewIsPublic(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Trip created!', 'success');
     } catch (err) {
@@ -227,6 +250,65 @@ export default function PlanScreen() {
     }
   };
 
+  const handleApproveRequest = async (tripId: string, memberId: string, email: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await approveJoinRequest(memberId);
+      // Update local state only after successful API call
+      setTripMembers(prev => ({
+        ...prev,
+        [tripId]: (prev[tripId] || []).map(m =>
+          m.id === memberId ? { ...m, status: 'approved' as const } : m
+        ),
+      }));
+      setTrips(prev =>
+        prev.map(t => t.id === tripId ? { ...t, member_count: t.member_count + 1 } : t)
+      );
+      showToast(`${email} approved!`, 'success');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      showToast('Failed to approve request', 'error');
+    }
+  };
+
+  const handleRejectRequest = async (tripId: string, memberId: string, email: string) => {
+    Alert.alert('Reject Request', `Reject join request from ${email}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await rejectJoinRequest(memberId);
+            setTripMembers(prev => ({
+              ...prev,
+              [tripId]: (prev[tripId] || []).map(m =>
+                m.id === memberId ? { ...m, status: 'rejected' as const } : m
+              ),
+            }));
+            showToast('Request rejected', 'info');
+          } catch {
+            showToast('Failed to reject request', 'error');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleToggleVisibility = async (trip: Trip) => {
+    const newVisibility = !trip.is_public;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await updateTripVisibility(trip.id, newVisibility);
+      setTrips(prev =>
+        prev.map(t => t.id === trip.id ? { ...t, is_public: newVisibility } : t)
+      );
+      showToast(newVisibility ? 'Trip is now public' : 'Trip is now private', 'success');
+    } catch {
+      showToast('Failed to update visibility', 'error');
+    }
+  };
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
     const d = new Date(dateStr + 'T00:00:00');
@@ -294,6 +376,32 @@ export default function PlanScreen() {
               keyboardType="numbers-and-punctuation"
               maxLength={10}
             />
+
+            <View style={styles.visibilityRow}>
+              <View style={styles.visibilityLeft}>
+                {newIsPublic ? (
+                  <Globe size={18} color="#2563eb" strokeWidth={2} />
+                ) : (
+                  <Lock size={18} color="#6b7280" strokeWidth={2} />
+                )}
+                <View>
+                  <Text style={styles.visibilityLabel}>
+                    {newIsPublic ? 'Public Trip' : 'Private Trip'}
+                  </Text>
+                  <Text style={styles.visibilityHint}>
+                    {newIsPublic
+                      ? 'Others can discover and request to join'
+                      : 'Only visible to you'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={newIsPublic}
+                onValueChange={setNewIsPublic}
+                trackColor={{ false: '#e5e7eb', true: '#bfdbfe' }}
+                thumbColor={newIsPublic ? '#2563eb' : '#9ca3af'}
+              />
+            </View>
 
             <TouchableOpacity
               style={[styles.createButton, creating && styles.buttonDisabled]}
@@ -405,13 +513,28 @@ export default function PlanScreen() {
               const expanded = expandedTripId === trip.id;
               const items = tripItems[trip.id] || [];
               const isLoadingItems = loadingItems[trip.id];
+              const members = tripMembers[trip.id] || [];
+              const pendingRequests = members.filter(m => m.status === 'pending');
+              const approvedMembers = members.filter(m => m.status === 'approved');
 
               return (
                 <View key={trip.id} style={styles.tripCard}>
                   {/* Trip header */}
                   <Pressable style={styles.tripHeader} onPress={() => toggleExpand(trip.id)}>
                     <View style={styles.tripHeaderLeft}>
-                      <Text style={styles.tripTitle}>{trip.title}</Text>
+                      <View style={styles.tripTitleRow}>
+                        <Text style={styles.tripTitle}>{trip.title}</Text>
+                        <View style={[styles.visibilityBadge, trip.is_public ? styles.publicBadge : styles.privateBadge]}>
+                          {trip.is_public ? (
+                            <Globe size={10} color="#1d4ed8" strokeWidth={2} />
+                          ) : (
+                            <Lock size={10} color="#6b7280" strokeWidth={2} />
+                          )}
+                          <Text style={[styles.visibilityBadgeText, trip.is_public ? styles.publicBadgeText : styles.privateBadgeText]}>
+                            {trip.is_public ? 'Public' : 'Private'}
+                          </Text>
+                        </View>
+                      </View>
                       <View style={styles.tripMeta}>
                         <MapPin size={14} color="#6b7280" strokeWidth={2} />
                         <Text style={styles.tripDestination}>{trip.destination}</Text>
@@ -422,6 +545,17 @@ export default function PlanScreen() {
                           <Text style={styles.tripDates}>
                             {formatDate(trip.start_date) ?? '?'}
                             {trip.end_date ? ` → ${formatDate(trip.end_date)}` : ''}
+                          </Text>
+                        </View>
+                      )}
+                      {trip.is_public && (
+                        <View style={styles.tripMeta}>
+                          <Users size={13} color="#6b7280" strokeWidth={2} />
+                          <Text style={styles.tripDestination}>
+                            {trip.member_count} member{trip.member_count !== 1 ? 's' : ''}
+                            {pendingRequests.length > 0 && expanded
+                              ? ` · ${pendingRequests.length} pending`
+                              : ''}
                           </Text>
                         </View>
                       )}
@@ -442,9 +576,30 @@ export default function PlanScreen() {
                     </View>
                   </Pressable>
 
-                  {/* Trip items */}
+                  {/* Trip body (expanded) */}
                   {expanded && (
                     <View style={styles.tripBody}>
+                      {/* Visibility toggle */}
+                      <View style={styles.visibilityToggleRow}>
+                        <View style={styles.visibilityLeft}>
+                          {trip.is_public ? (
+                            <Globe size={15} color="#2563eb" strokeWidth={2} />
+                          ) : (
+                            <Lock size={15} color="#6b7280" strokeWidth={2} />
+                          )}
+                          <Text style={styles.visibilityToggleLabel}>
+                            {trip.is_public ? 'Public — visible in Feed' : 'Private — only you'}
+                          </Text>
+                        </View>
+                        <Switch
+                          value={trip.is_public}
+                          onValueChange={() => handleToggleVisibility(trip)}
+                          trackColor={{ false: '#e5e7eb', true: '#bfdbfe' }}
+                          thumbColor={trip.is_public ? '#2563eb' : '#9ca3af'}
+                        />
+                      </View>
+
+                      {/* Trip items */}
                       {isLoadingItems ? (
                         <ActivityIndicator color="#2563eb" style={{ marginVertical: 12 }} />
                       ) : items.length === 0 ? (
@@ -488,6 +643,62 @@ export default function PlanScreen() {
                         <Plus size={16} color="#2563eb" strokeWidth={2} />
                         <Text style={styles.addPlacesButtonText}>Add from Saved Places</Text>
                       </TouchableOpacity>
+
+                      {/* Members section (only for public trips) */}
+                      {trip.is_public && !isLoadingItems && (
+                        <View style={styles.membersSection}>
+                          <Text style={styles.membersSectionTitle}>
+                            <Users size={14} color="#374151" strokeWidth={2} /> Members
+                          </Text>
+
+                          {/* Pending requests */}
+                          {pendingRequests.length > 0 && (
+                            <View>
+                              <Text style={styles.membersSubTitle}>Pending Requests</Text>
+                              {pendingRequests.map(member => (
+                                <View key={member.id} style={styles.memberRow}>
+                                  <Text style={styles.memberEmail} numberOfLines={1}>
+                                    {member.email}
+                                  </Text>
+                                  <View style={styles.memberActions}>
+                                    <TouchableOpacity
+                                      style={styles.approveBtn}
+                                      onPress={() => handleApproveRequest(trip.id, member.id, member.email)}
+                                    >
+                                      <Check size={14} color="#16a34a" strokeWidth={2.5} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      style={styles.rejectBtn}
+                                      onPress={() => handleRejectRequest(trip.id, member.id, member.email)}
+                                    >
+                                      <XCircle size={14} color="#dc2626" strokeWidth={2} />
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+
+                          {/* Approved members */}
+                          {approvedMembers.length > 0 ? (
+                            <View>
+                              <Text style={styles.membersSubTitle}>Approved Members</Text>
+                              {approvedMembers.map(member => (
+                                <View key={member.id} style={styles.memberRow}>
+                                  <Users size={13} color="#2563eb" strokeWidth={2} />
+                                  <Text style={styles.memberEmail} numberOfLines={1}>
+                                    {member.email}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : pendingRequests.length === 0 ? (
+                            <Text style={styles.noMembersText}>
+                              No members yet. Share your trip in the Feed!
+                            </Text>
+                          ) : null}
+                        </View>
+                      )}
                     </View>
                   )}
                 </View>
@@ -782,5 +993,145 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6b7280',
     marginTop: 2,
+  },
+  // Trip title row with visibility badge
+  tripTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  visibilityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 3,
+  },
+  publicBadge: {
+    backgroundColor: '#dbeafe',
+  },
+  privateBadge: {
+    backgroundColor: '#f3f4f6',
+  },
+  visibilityBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  publicBadgeText: {
+    color: '#1d4ed8',
+  },
+  privateBadgeText: {
+    color: '#6b7280',
+  },
+  // Visibility toggle inside expanded body
+  visibilityToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  visibilityToggleLabel: {
+    fontSize: 13,
+    color: '#374151',
+    marginLeft: 6,
+  },
+  // Visibility row in create modal
+  visibilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  visibilityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  visibilityLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  visibilityHint: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 1,
+  },
+  // Members section
+  membersSection: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    paddingTop: 12,
+    gap: 6,
+  },
+  membersSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  membersSubTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    marginBottom: 4,
+    gap: 8,
+  },
+  memberEmail: {
+    flex: 1,
+    fontSize: 13,
+    color: '#374151',
+  },
+  memberActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  approveBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rejectBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noMembersText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    textAlign: 'center',
+    paddingVertical: 8,
   },
 });
