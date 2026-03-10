@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS trips (
   start_date date,
   end_date date,
   notes text,
+  is_public boolean NOT NULL DEFAULT false,
+  member_count integer NOT NULL DEFAULT 0,
   created_at timestamptz DEFAULT now()
 );
 
@@ -68,7 +70,8 @@ CREATE POLICY "Users can create their own trips"
 
 CREATE POLICY "Users can update their own trips"
   ON trips FOR UPDATE TO authenticated
-  USING (auth.uid() = user_id);
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete their own trips"
   ON trips FOR DELETE TO authenticated

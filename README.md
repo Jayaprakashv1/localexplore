@@ -69,13 +69,41 @@ npm install
 ```
 
 3. Set up environment variables:
-Create a `.env` file with your Supabase credentials:
+Create a `.env` file in the project root with your Supabase credentials:
 ```
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-4. Start the development server:
+4. **Apply database migrations** (required before running the app):
+
+   **Option A — Supabase CLI (recommended):**
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref <your-project-ref>
+   npx supabase db push
+   ```
+
+   **Option B — Supabase Dashboard (SQL Editor):**
+   Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) for your project
+   and run the migrations in order:
+   1. `supabase/migrations/20251225031731_create_saved_places_schema.sql`
+   2. `supabase/migrations/20260104130517_add_missing_rls_policies.sql`
+   3. `supabase/migrations/20260310000001_create_trips_schema.sql`
+   4. `supabase/migrations/20260310000002_add_trip_members_feed.sql`
+
+   > **Already have the database set up but seeing 404 errors?**
+   > Run the idempotent fix migration in the SQL Editor:
+   > `supabase/migrations/20260310000003_complete_db_setup.sql`
+   > This migration is safe to run multiple times and will create any missing
+   > tables, columns, indexes, functions and RLS policies.
+
+5. **Deploy the Edge Function** (required for the Discover screen):
+   ```bash
+   npx supabase functions deploy discover-location
+   ```
+
+6. Start the development server:
 ```bash
 npm run dev
 ```
@@ -84,22 +112,38 @@ npm run dev
 
 ```
 localexplore/
-├── app/                    # App screens
+├── app/                    # App screens (Expo Router)
 │   ├── (tabs)/            # Main tab screens
 │   │   ├── index.tsx      # Discover screen
 │   │   ├── saved.tsx      # Saved places screen
+│   │   ├── plan.tsx       # Trip planner screen
+│   │   ├── feed.tsx       # Public trips feed screen
 │   │   ├── profile.tsx    # Profile screen
 │   │   └── _layout.tsx    # Tabs layout
+│   ├── _layout.tsx        # Root layout with auth guard
 │   ├── login.tsx          # Login screen
 │   └── register.tsx       # Register screen
 ├── components/            # Reusable components
 │   ├── Toast.tsx          # Toast notification component
+│   ├── WeatherWidget.tsx  # Weather widget component
 │   └── LoadingSkeleton.tsx # Loading skeleton component
 ├── contexts/              # React contexts
 │   └── AuthContext.tsx    # Authentication context
 ├── lib/                   # Utility functions
-│   └── database.ts        # Database operations
-└── hooks/                 # Custom hooks
+│   ├── database.ts        # All database operations
+│   └── supabase.ts        # Supabase client initialisation
+├── hooks/                 # Custom hooks
+├── supabase/
+│   ├── config.toml        # Supabase CLI configuration
+│   ├── functions/
+│   │   └── discover-location/index.ts  # Edge function
+│   └── migrations/        # Database migrations (apply in order)
+│       ├── 20251225031731_create_saved_places_schema.sql
+│       ├── 20260104130517_add_missing_rls_policies.sql
+│       ├── 20260310000001_create_trips_schema.sql
+│       ├── 20260310000002_add_trip_members_feed.sql
+│       └── 20260310000003_complete_db_setup.sql  # Idempotent fix migration
+└── assets/                # Images and fonts
 ```
 
 ## Key Features Implementation
