@@ -69,17 +69,7 @@ export default function PlanScreen() {
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadTrips();
-    }, [])
-  );
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ visible: true, message, type });
-  };
-
-  const loadTrips = async () => {
+  const loadTrips = useCallback(async () => {
     setLoading(true);
     // Clear item/member caches so re-expanded trips always show fresh data
     setTripItems({});
@@ -89,11 +79,21 @@ export default function PlanScreen() {
     try {
       const data = await getTrips();
       setTrips(data);
-    } catch (err) {
-      showToast('Failed to load trips', 'error');
+    } catch {
+      setToast({ visible: true, message: 'Failed to load trips', type: 'error' });
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTrips();
+    }, [loadTrips])
+  );
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
   };
 
   const onRefresh = async () => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,25 +6,22 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  Animated,
   Alert,
   Share,
   Linking,
   Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Bookmark, Trash2, Filter, Share2, Navigation } from 'lucide-react-native';
-import { getSavedPlaces, unsavePlace } from '@/lib/database';
+import { Bookmark, Trash2, Share2, Navigation } from 'lucide-react-native';
+import { getSavedPlaces, unsavePlace, SavedPlace } from '@/lib/database';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
 import Toast from '@/components/Toast';
 import { PlaceCardSkeleton } from '@/components/LoadingSkeleton';
 import { Swipeable } from 'react-native-gesture-handler';
 
 export default function SavedScreen() {
-  const [places, setPlaces] = useState<any[]>([]);
+  const [places, setPlaces] = useState<SavedPlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -102,7 +99,7 @@ export default function SavedScreen() {
     );
   };
 
-  const handleSharePlace = async (place: any) => {
+  const handleSharePlace = async (place: SavedPlace) => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const ratingText = place.rating ? `\nRating: ⭐ ${place.rating}/5` : '';
@@ -116,7 +113,7 @@ export default function SavedScreen() {
     }
   };
 
-  const handleGetDirections = (place: any) => {
+  const handleGetDirections = (place: SavedPlace) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const query = encodeURIComponent(`${place.place_name}, ${place.location}`);
     const url = Platform.select({
