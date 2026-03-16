@@ -9,23 +9,22 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
-  FlatList,
   RefreshControl,
   Animated,
   Share,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, X, Trash, TrendingUp, Share2 } from 'lucide-react-native';
-import { addSearchHistory, getSearchHistory, savePlace, isSaved, getSavedPlacesByLocation, clearSearchHistory } from '@/lib/database';
+import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, Trash, TrendingUp, Share2 } from 'lucide-react-native';
+import { addSearchHistory, getSearchHistory, savePlace, isSaved, clearSearchHistory, PlaceType } from '@/lib/database';
 import Toast from '@/components/Toast';
 import { PlaceCardSkeleton } from '@/components/LoadingSkeleton';
 import WeatherWidget from '@/components/WeatherWidget';
 
 type LocationData = {
-  places: Array<{ name: string; description: string; rating?: number }>;
-  restaurants: Array<{ name: string; cuisine: string; rating?: number }>;
-  activities: Array<{ name: string; description: string }>;
-  foods: Array<{ name: string; description: string }>;
+  places: { name: string; description: string; rating?: number }[];
+  restaurants: { name: string; cuisine: string; rating?: number }[];
+  activities: { name: string; description: string }[];
+  foods: { name: string; description: string }[];
 };
 
 export default function DiscoverScreen() {
@@ -149,7 +148,7 @@ export default function DiscoverScreen() {
     }
   };
 
-  const handleSavePlace = async (placeName: string, placeType: string, description?: string, rating?: number) => {
+  const handleSavePlace = async (placeName: string, placeType: PlaceType, description?: string, rating?: number) => {
     if (!placeName?.trim() || !placeType?.trim()) {
       setError('Invalid place information');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -159,7 +158,7 @@ export default function DiscoverScreen() {
 
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await savePlace(placeName, placeType as any, location, description, rating);
+      await savePlace(placeName, placeType, location, description, rating);
       setSavedPlaces(prev => new Set(prev).add(placeName));
       showToast('Place saved successfully!', 'success');
     } catch (err) {
@@ -196,7 +195,7 @@ export default function DiscoverScreen() {
     }
   };
 
-  const PlaceCard = ({ title, description, type, rating }: any) => {
+  const PlaceCard = ({ title, description, type, rating }: { title: string; description?: string; type: PlaceType; rating?: number }) => {
     const isSavedPlace = savedPlaces.has(title);
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
 

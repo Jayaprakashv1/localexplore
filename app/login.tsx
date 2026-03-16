@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Link, router } from 'expo-router';
@@ -143,7 +142,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>{"Don't have an account? "}</Text>
             <Link href="/register" asChild>
               <TouchableOpacity>
                 <Text style={styles.link}>Sign Up</Text>

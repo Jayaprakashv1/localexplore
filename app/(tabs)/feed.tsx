@@ -58,26 +58,26 @@ export default function FeedScreen() {
     type: 'info' as 'success' | 'error' | 'info',
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      loadFeed();
-    }, [])
-  );
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ visible: true, message, type });
-  };
-
-  const loadFeed = async () => {
+  const loadFeed = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getPublicTrips();
       setTrips(data);
     } catch {
-      showToast('Failed to load feed', 'error');
+      setToast({ visible: true, message: 'Failed to load feed', type: 'error' });
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadFeed();
+    }, [loadFeed])
+  );
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
   };
 
   const onRefresh = async () => {

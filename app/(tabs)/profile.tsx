@@ -11,7 +11,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { User, LogOut, Mail, Calendar, Shield } from 'lucide-react-native';
+import { User, LogOut, Mail, Calendar } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import Toast from '@/components/Toast';
@@ -52,7 +52,7 @@ export default function ProfileScreen() {
             await signOut();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             router.replace('/login');
-          } catch (error) {
+          } catch {
             setLoading(false);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert('Error', 'Failed to sign out');
