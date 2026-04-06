@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Wind } from 'lucide-react-native';
+import { cacheGet, cacheSet, TTL } from '@/lib/cache';
 
 interface WeatherData {
   temperature: number;
@@ -46,8 +47,16 @@ export default function WeatherWidget({ location }: WeatherWidgetProps) {
   }, [location]);
 
   const fetchWeather = async (loc: string) => {
+    const cacheKey = `weather_${loc.toLowerCase()}`;
+
+    // Show cached data immediately while revalidating
+    const cached = await cacheGet<WeatherData>(cacheKey);
+    if (cached) {
+      setWeather(cached);
+      return; // Still fresh (TTL enforced in cacheGet)
+    }
+
     setLoading(true);
-    setWeather(null);
     try {
       const geoRes = await fetch(
         `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(loc)}&count=1&language=en&format=json`
@@ -63,12 +72,14 @@ export default function WeatherWidget({ location }: WeatherWidgetProps) {
       const wxData = await wxRes.json();
 
       if (wxData.current) {
-        setWeather({
+        const data: WeatherData = {
           temperature: Math.round(wxData.current.temperature_2m),
           weathercode: wxData.current.weathercode,
           windspeed: Math.round(wxData.current.windspeed_10m),
           locationName: name,
-        });
+        };
+        setWeather(data);
+        await cacheSet(cacheKey, data, TTL.WEATHER);
       }
     } catch {
       // Weather is a nice-to-have; fail silently
@@ -77,7 +88,7 @@ export default function WeatherWidget({ location }: WeatherWidgetProps) {
     }
   };
 
-  if (loading) {
+  if (loading && !weather) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="small" color="#2563eb" />

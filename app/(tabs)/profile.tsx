@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   RefreshControl,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { User, LogOut, Mail, Calendar } from 'lucide-react-native';
+import { User, LogOut, Mail, Calendar, Bookmark, Map, Clock } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { getUserStats, UserStats } from '@/lib/database';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import Toast from '@/components/Toast';
 
@@ -20,16 +22,30 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<UserStats>({ savedCount: 0, tripCount: 0, pendingJoinRequests: 0 });
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
+
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await getUserStats();
+      setStats(data);
+    } catch {
+      // Stats are non-critical; fail silently
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStats();
+    }, [loadStats])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Simulate refresh - in a real app, you would reload user data
-    setTimeout(() => {
-      setRefreshing(false);
-      showToast('Profile refreshed!', 'success');
-    }, 1000);
+    await loadStats();
+    setRefreshing(false);
+    showToast('Profile refreshed!', 'success');
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -93,6 +109,29 @@ export default function ProfileScreen() {
               <Text style={styles.email}>{user.email}</Text>
             </View>
           )}
+        </View>
+
+        {/* Stats row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Bookmark size={20} color="#2563eb" strokeWidth={2} />
+            <Text style={styles.statNumber}>{stats.savedCount}</Text>
+            <Text style={styles.statLabel}>Saved</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCard}>
+            <Map size={20} color="#2563eb" strokeWidth={2} />
+            <Text style={styles.statNumber}>{stats.tripCount}</Text>
+            <Text style={styles.statLabel}>Trips</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCard}>
+            <Clock size={20} color="#f59e0b" strokeWidth={2} />
+            <Text style={[styles.statNumber, stats.pendingJoinRequests > 0 && styles.statNumberWarning]}>
+              {stats.pendingJoinRequests}
+            </Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -196,6 +235,35 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 14,
     color: '#6b7280',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingVertical: 16,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  statNumber: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  statNumberWarning: {
+    color: '#f59e0b',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
   },
   content: {
     padding: 16,

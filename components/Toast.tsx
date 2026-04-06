@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Text, StyleSheet, Animated } from 'react-native';
 import { CheckCircle, XCircle, Info } from 'lucide-react-native';
 
@@ -19,27 +19,31 @@ export default function Toast({
   onHide,
   duration = 3000,
 }: ToastProps) {
-  const opacity = React.useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  // Keep a stable ref to onHide so animation callbacks never become stale
+  const onHideRef = useRef(onHide);
+  useEffect(() => { onHideRef.current = onHide; }, [onHide]);
 
   useEffect(() => {
-    if (visible) {
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.delay(duration),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        onHide();
-      });
-    }
-  }, [visible, duration, onHide, opacity]);
+    if (!visible) return;
+    const animation = Animated.sequence([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(duration),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]);
+    animation.start(({ finished }) => {
+      if (finished) onHideRef.current();
+    });
+    return () => animation.stop();
+  }, [visible, duration, opacity]);
 
   if (!visible) return null;
 
@@ -56,23 +60,17 @@ export default function Toast({
 
   const getBackgroundColor = () => {
     switch (type) {
-      case 'success':
-        return '#d1fae5';
-      case 'error':
-        return '#fee2e2';
-      default:
-        return '#dbeafe';
+      case 'success': return '#d1fae5';
+      case 'error': return '#fee2e2';
+      default: return '#dbeafe';
     }
   };
 
   const getBorderColor = () => {
     switch (type) {
-      case 'success':
-        return '#10b981';
-      case 'error':
-        return '#ef4444';
-      default:
-        return '#3b82f6';
+      case 'success': return '#10b981';
+      case 'error': return '#ef4444';
+      default: return '#3b82f6';
     }
   };
 
