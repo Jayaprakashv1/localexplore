@@ -213,7 +213,7 @@ export default function PlanScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await removeTripItem(itemId);
+            await removeTripItem(itemId, tripId);
             setTripItems(prev => ({
               ...prev,
               [tripId]: (prev[tripId] || []).filter(i => i.id !== itemId),

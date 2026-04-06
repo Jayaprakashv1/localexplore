@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,10 +15,12 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { MapPin, Search, Utensils, Landmark, Activity, Bookmark, Trash, TrendingUp, Share2 } from 'lucide-react-native';
-import { addSearchHistory, getSearchHistory, savePlace, isSaved, clearSearchHistory, PlaceType } from '@/lib/database';
+import { addSearchHistory, getSearchHistory, savePlace, isSavedBatch, clearSearchHistory, PlaceType } from '@/lib/database';
+import { useFocusEffect } from '@react-navigation/native';
 import Toast from '@/components/Toast';
 import { PlaceCardSkeleton } from '@/components/LoadingSkeleton';
 import WeatherWidget from '@/components/WeatherWidget';
+import { useNetwork } from '@/contexts/NetworkContext';
 
 type LocationData = {
   places: { name: string; description: string; rating?: number }[];
@@ -26,6 +28,120 @@ type LocationData = {
   activities: { name: string; description: string }[];
   foods: { name: string; description: string }[];
 };
+
+// ── PlaceCard extracted as a stable module-level component ──────────────────
+interface PlaceCardProps {
+  title: string;
+  description?: string;
+  type: PlaceType;
+  rating?: number;
+  isSaved: boolean;
+  location: string;
+  onSave: (title: string, type: PlaceType, description?: string, rating?: number) => void;
+}
+
+const PlaceCard = React.memo(function PlaceCard({ title, description, type, rating, isSaved: isSavedProp, location, onSave }: PlaceCardProps) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+    onSave(title, type, description, rating);
+  };
+
+  const handleShare = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const ratingText = rating ? `\nRating: ⭐ ${rating}/5` : '';
+      const descText = description ? `\n${description}` : '';
+      await Share.share({
+        message: `Check out ${title} in ${location}!${descText}${ratingText}\n\nDiscovered via Travel Discover app.`,
+        title,
+      });
+    } catch {
+      // User cancelled share – no action needed
+    }
+  };
+
+  return (
+    <Animated.View style={[cardStyles.card, { transform: [{ scale: scaleAnim }] }]}>
+      <View style={cardStyles.cardHeader}>
+        <View style={cardStyles.cardTitleContainer}>
+          <Text style={cardStyles.cardTitle}>{title}</Text>
+          {rating ? <Text style={cardStyles.rating}>⭐ {rating}/5</Text> : null}
+        </View>
+        <View style={cardStyles.cardActions}>
+          <TouchableOpacity onPress={handleShare} style={cardStyles.actionButton}>
+            <Share2 size={18} color="#6b7280" strokeWidth={2} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handlePress} style={cardStyles.actionButton}>
+            <Bookmark
+              size={20}
+              color={isSavedProp ? '#2563eb' : '#d1d5db'}
+              strokeWidth={2}
+              fill={isSavedProp ? '#2563eb' : 'none'}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+      <Text style={cardStyles.cardDescription}>{description}</Text>
+    </Animated.View>
+  );
+});
+
+const cardStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  cardTitleContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  rating: {
+    fontSize: 13,
+    color: '#f59e0b',
+    fontWeight: '600',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+});
 
 export default function DiscoverScreen() {
   const [location, setLocation] = useState('');
@@ -37,10 +153,13 @@ export default function DiscoverScreen() {
   const [showHistory, setShowHistory] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
+  const { isOnline } = useNetwork();
 
-  useEffect(() => {
-    loadSearchHistory();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadSearchHistory();
+    }, [])
+  );
 
   const loadSearchHistory = async () => {
     try {
@@ -75,6 +194,13 @@ export default function DiscoverScreen() {
     if (trimmedLocation.length > 100) {
       setError('Location must be less than 100 characters');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    if (!isOnline) {
+      setError('You\'re offline. Connect to the internet to discover new places.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showToast('No internet connection', 'error');
       return;
     }
 
@@ -122,14 +248,15 @@ export default function DiscoverScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(`Found ${(data.places?.length || 0) + (data.restaurants?.length || 0)} results!`, 'success');
 
-      const newSavedPlaces = new Set<string>();
-      const places = [...(data.places || []), ...(data.restaurants || []), ...(data.activities || []), ...(data.foods || [])];
-      for (const place of places) {
-        if (place?.name && await isSaved(place.name, trimmedLocation)) {
-          newSavedPlaces.add(place.name);
-        }
-      }
-      setSavedPlaces(newSavedPlaces);
+      // Batch check saved status — single DB call instead of N separate calls
+      const allPlaceNames = [
+        ...(data.places || []).map((p: { name: string }) => p.name),
+        ...(data.restaurants || []).map((r: { name: string }) => r.name),
+        ...(data.activities || []).map((a: { name: string }) => a.name),
+        ...(data.foods || []).map((f: { name: string }) => f.name),
+      ].filter(Boolean);
+      const savedSet = await isSavedBatch(allPlaceNames, trimmedLocation);
+      setSavedPlaces(savedSet);
     } catch (err) {
       let errorMsg = 'Something went wrong';
       if (err instanceof Error) {
@@ -193,69 +320,6 @@ export default function DiscoverScreen() {
       console.error('Failed to clear history:', err);
       showToast('Failed to clear history', 'error');
     }
-  };
-
-  const PlaceCard = ({ title, description, type, rating }: { title: string; description?: string; type: PlaceType; rating?: number }) => {
-    const isSavedPlace = savedPlaces.has(title);
-    const scaleAnim = React.useRef(new Animated.Value(1)).current;
-
-    const handlePress = () => {
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 0.95,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      handleSavePlace(title, type, description, rating);
-    };
-
-    const handleShare = async () => {
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const ratingText = rating ? `\nRating: ⭐ ${rating}/5` : '';
-        const descText = description ? `\n${description}` : '';
-        await Share.share({
-          message: `Check out ${title} in ${location}!${descText}${ratingText}\n\nDiscovered via Travel Discover app.`,
-          title: title,
-        });
-      } catch {
-        // User cancelled share – no action needed
-      }
-    };
-
-    return (
-      <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleContainer}>
-            <Text style={styles.cardTitle}>{title}</Text>
-            {rating && <Text style={styles.rating}>⭐ {rating}/5</Text>}
-          </View>
-          <View style={styles.cardActions}>
-            <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
-              <Share2 size={18} color="#6b7280" strokeWidth={2} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handlePress}
-              style={styles.actionButton}
-            >
-              <Bookmark
-                size={20}
-                color={isSavedPlace ? '#2563eb' : '#d1d5db'}
-                strokeWidth={2}
-                fill={isSavedPlace ? '#2563eb' : 'none'}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <Text style={styles.cardDescription}>{description}</Text>
-      </Animated.View>
-    );
   };
 
   return (
@@ -371,11 +435,14 @@ export default function DiscoverScreen() {
                 </View>
                 {results.places.map((place, index) => (
                   <PlaceCard
-                    key={index}
+                    key={`place-${index}`}
                     title={place.name}
                     description={place.description}
                     type="place"
                     rating={place.rating}
+                    isSaved={savedPlaces.has(place.name)}
+                    location={location}
+                    onSave={handleSavePlace}
                   />
                 ))}
               </View>
@@ -389,11 +456,14 @@ export default function DiscoverScreen() {
                 </View>
                 {results.restaurants.map((restaurant, index) => (
                   <PlaceCard
-                    key={index}
+                    key={`restaurant-${index}`}
                     title={restaurant.name}
                     description={restaurant.cuisine}
                     type="restaurant"
                     rating={restaurant.rating}
+                    isSaved={savedPlaces.has(restaurant.name)}
+                    location={location}
+                    onSave={handleSavePlace}
                   />
                 ))}
               </View>
@@ -407,10 +477,13 @@ export default function DiscoverScreen() {
                 </View>
                 {results.activities.map((activity, index) => (
                   <PlaceCard
-                    key={index}
+                    key={`activity-${index}`}
                     title={activity.name}
                     description={activity.description}
                     type="activity"
+                    isSaved={savedPlaces.has(activity.name)}
+                    location={location}
+                    onSave={handleSavePlace}
                   />
                 ))}
               </View>
@@ -424,10 +497,13 @@ export default function DiscoverScreen() {
                 </View>
                 {results.foods.map((food, index) => (
                   <PlaceCard
-                    key={index}
+                    key={`food-${index}`}
                     title={food.name}
                     description={food.description}
                     type="food"
+                    isSaved={savedPlaces.has(food.name)}
+                    location={location}
+                    onSave={handleSavePlace}
                   />
                 ))}
               </View>
@@ -605,47 +681,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginLeft: 8,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  cardTitleContainer: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  cardDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-  },
-  rating: {
-    fontSize: 14,
-    color: '#f59e0b',
-    fontWeight: '600',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  actionButton: {
-    padding: 8,
   },
   emptyState: {
     alignItems: 'center',

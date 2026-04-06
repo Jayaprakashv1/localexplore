@@ -3,11 +3,19 @@ import { Stack, router, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFrameworkReady } from "@/hooks/useFrameworkReady";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { NetworkProvider, useNetwork } from "@/contexts/NetworkContext";
+import { setNetworkStatus } from "@/lib/database";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
+  const { isOnline } = useNetwork();
   const segments = useSegments();
+
+  // Keep database layer in sync with network status
+  useEffect(() => {
+    setNetworkStatus(isOnline);
+  }, [isOnline]);
 
   useEffect(() => {
     if (loading) return;
@@ -44,8 +52,10 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootLayoutNav />
-      <StatusBar style="auto" />
+      <NetworkProvider>
+        <RootLayoutNav />
+        <StatusBar style="auto" />
+      </NetworkProvider>
     </AuthProvider>
   );
 }
