@@ -539,15 +539,22 @@ export async function addTripItem(
   await cacheRemove(cacheKey);
 }
 
-export async function removeTripItem(itemId: string): Promise<void> {
+export async function removeTripItem(itemId: string, tripId?: string): Promise<void> {
   if (!itemId?.trim()) throw new Error('Item ID is required');
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new Error('User not authenticated');
 
   if (!isOnline()) {
-    // Remove from all cached trip item arrays
-    await enqueue('removeTripItem', { itemId, userId: user.id });
+    // Optimistically remove from the specific trip item cache if tripId is known
+    if (tripId) {
+      const cacheKey = `trip_items_${tripId}`;
+      const cached = await cacheGet<TripItem[]>(cacheKey);
+      if (cached) {
+        await cacheSet(cacheKey, cached.filter(i => i.id !== itemId), TTL.TRIP_ITEMS);
+      }
+    }
+    await enqueue('removeTripItem', { itemId, tripId, userId: user.id });
     return;
   }
 
@@ -558,6 +565,8 @@ export async function removeTripItem(itemId: string): Promise<void> {
     .eq('user_id', user.id);
 
   if (error) throw error;
+  // Invalidate the trip items cache if we know the trip
+  if (tripId) await cacheRemove(`trip_items_${tripId}`);
 }
 
 // ── Trip Visibility ───────────────────────────────────────────────────────────

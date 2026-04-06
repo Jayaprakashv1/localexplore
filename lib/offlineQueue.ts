@@ -35,7 +35,10 @@ const QUEUE_KEY = 'le_offline_queue';
 export async function enqueue(type: QueuedOpType, payload: Record<string, unknown>): Promise<void> {
   try {
     const queue = await readQueue();
-    queue.push({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, type, payload, queuedAt: Date.now() });
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    queue.push({ id, type, payload, queuedAt: Date.now() });
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
   } catch {
     // Fail silently — we'll retry later

@@ -43,9 +43,14 @@ export default function ProfileScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await loadStats();
-    setRefreshing(false);
-    showToast('Profile refreshed!', 'success');
+    try {
+      await loadStats();
+      showToast('Profile refreshed!', 'success');
+    } catch {
+      showToast('Failed to refresh', 'error');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
